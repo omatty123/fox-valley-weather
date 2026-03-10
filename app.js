@@ -121,7 +121,7 @@ function initRefresh() {
 // ---- Data Loading ----
 async function apiFetch(url) {
   const res = await fetch(url, {
-    headers: { "User-Agent": CONFIG.userAgent, Accept: "application/geo+json" },
+    headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
@@ -161,13 +161,18 @@ function renderAlerts() {
     return;
   }
 
-  const alert = state.alerts[0].properties;
-  const severity = alert.severity?.toLowerCase() || "warning";
-  banner.className = `alert-banner severity-${severity}`;
-  banner.textContent = `${alert.event}: ${alert.headline || alert.description?.slice(0, 100)}`;
-  banner.onclick = () => {
-    if (alert.uri) window.open(alert.uri, "_blank");
-  };
+  // Show all active alerts
+  const alertsHtml = state.alerts.map((f) => {
+    const a = f.properties;
+    const severity = a.severity?.toLowerCase() || "warning";
+    const url = a.web || a["@id"] || "";
+    return `<a class="alert-link severity-${severity}" href="${url}" target="_blank" rel="noopener">
+      ${a.event}: ${a.headline || a.description?.slice(0, 120) || "Details"}
+    </a>`;
+  }).join("");
+
+  banner.innerHTML = alertsHtml;
+  banner.className = "alert-banner";
 }
 
 // ---- Observations (Current Conditions) ----
