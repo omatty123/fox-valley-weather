@@ -64,16 +64,52 @@ body {
 }
 
 .alert-link {
-  display: block;
   padding: 10px 16px;
   font-size: 0.875rem;
-  font-weight: 600;
-  text-decoration: none;
+  cursor: pointer;
   transition: filter 0.2s;
 }
 
 .alert-link:hover {
   filter: brightness(0.9);
+}
+
+.alert-summary {
+  font-weight: 600;
+}
+
+.alert-summary::after {
+  content: " ▸ tap for details";
+  font-weight: 400;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.alert-link.expanded .alert-summary::after {
+  content: " ▾";
+}
+
+.alert-detail {
+  margin-top: 8px;
+  font-weight: 400;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.alert-detail p {
+  margin-bottom: 8px;
+}
+
+.alert-instruction {
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.alert-meta {
+  font-size: 0.75rem;
+  opacity: 0.8;
 }
 
 .alert-link.severity-extreme,

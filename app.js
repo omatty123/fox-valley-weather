@@ -161,18 +161,35 @@ function renderAlerts() {
     return;
   }
 
-  // Show all active alerts
-  const alertsHtml = state.alerts.map((f) => {
+  // Show all active alerts as clickable banners that expand inline
+  const alertsHtml = state.alerts.map((f, i) => {
     const a = f.properties;
     const severity = a.severity?.toLowerCase() || "warning";
-    const url = a.web || a["@id"] || "";
-    return `<a class="alert-link severity-${severity}" href="${url}" target="_blank" rel="noopener">
-      ${a.event}: ${a.headline || a.description?.slice(0, 120) || "Details"}
-    </a>`;
+    return `<div class="alert-link severity-${severity}" data-alert-idx="${i}">
+      <div class="alert-summary">${a.event}: ${a.headline || a.description?.slice(0, 120) || "Details"}</div>
+      <div class="alert-detail hidden" id="alert-detail-${i}">
+        ${a.description ? `<p>${a.description}</p>` : ""}
+        ${a.instruction ? `<p class="alert-instruction"><strong>What to do:</strong> ${a.instruction}</p>` : ""}
+        <p class="alert-meta">
+          ${a.senderName ? `Source: ${a.senderName}` : ""}
+          ${a.expires ? `<br>Expires: ${new Date(a.expires).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}
+        </p>
+      </div>
+    </div>`;
   }).join("");
 
   banner.innerHTML = alertsHtml;
   banner.className = "alert-banner";
+
+  // Toggle detail on click
+  banner.querySelectorAll(".alert-link").forEach((el) => {
+    el.addEventListener("click", () => {
+      const idx = el.dataset.alertIdx;
+      const detail = document.getElementById(`alert-detail-${idx}`);
+      detail.classList.toggle("hidden");
+      el.classList.toggle("expanded");
+    });
+  });
 }
 
 // ---- Observations (Current Conditions) ----
