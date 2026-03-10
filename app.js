@@ -535,50 +535,154 @@ function parseAFDSections(text) {
 }
 
 // ---- Radar ----
+const RADAR_FRAMES = 12; // 2 hours of data at 10-min intervals
+const RADAR_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const RADAR_PLAYBACK_SPEED = 500; // ms between frames during animation
+const RADAR_BBOX_3857 = "-9974226,5373055,-9707060,5637278";
+
+let radarState = {
+  frames: [],        // Array of { time: Date, img: HTMLImageElement }
+  currentFrame: 0,
+  playing: false,
+  playTimer: null,
+};
+
 function initRadar() {
+  const playBtn = document.getElementById("radar-play");
+  const scrubber = document.getElementById("radar-scrubber");
+
+  playBtn.addEventListener("click", toggleRadarPlay);
+
+  scrubber.addEventListener("input", () => {
+    stopRadarPlay();
+    radarState.currentFrame = parseInt(scrubber.value);
+    showRadarFrame(radarState.currentFrame);
+  });
+
   document.getElementById("radar-refresh").addEventListener("click", () => {
+    stopRadarPlay();
     loadRadar();
   });
+}
+
+function toggleRadarPlay() {
+  if (radarState.playing) {
+    stopRadarPlay();
+  } else {
+    startRadarPlay();
+  }
+}
+
+function startRadarPlay() {
+  radarState.playing = true;
+  document.getElementById("radar-play-icon").classList.add("hidden");
+  document.getElementById("radar-pause-icon").classList.remove("hidden");
+
+  // If at the end, restart from beginning
+  if (radarState.currentFrame >= RADAR_FRAMES - 1) {
+    radarState.currentFrame = 0;
+    showRadarFrame(0);
+  }
+
+  radarState.playTimer = setInterval(() => {
+    radarState.currentFrame++;
+    if (radarState.currentFrame >= RADAR_FRAMES) {
+      radarState.currentFrame = 0; // loop
+    }
+    showRadarFrame(radarState.currentFrame);
+  }, RADAR_PLAYBACK_SPEED);
+}
+
+function stopRadarPlay() {
+  radarState.playing = false;
+  document.getElementById("radar-play-icon").classList.remove("hidden");
+  document.getElementById("radar-pause-icon").classList.add("hidden");
+  if (radarState.playTimer) {
+    clearInterval(radarState.playTimer);
+    radarState.playTimer = null;
+  }
+}
+
+function showRadarFrame(idx) {
+  const container = document.getElementById("radar-frames-container");
+  const imgs = container.querySelectorAll("img");
+  imgs.forEach((img, i) => {
+    img.classList.toggle("active-frame", i === idx);
+  });
+
+  document.getElementById("radar-scrubber").value = idx;
+
+  // Update time label
+  const frame = radarState.frames[idx];
+  if (frame) {
+    document.getElementById("radar-time-current").textContent =
+      frame.time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
 }
 
 async function loadRadar() {
   const loadingEl = document.getElementById("radar-loading");
   const mapEl = document.getElementById("radar-map");
-  const timestampEl = document.getElementById("radar-timestamp");
 
+  loadingEl.textContent = "";
   loadingEl.classList.remove("hidden");
   mapEl.classList.add("hidden");
 
   try {
-    // Load dark base map tiles as a composite image
+    // Load dark base map
     const basemap = document.getElementById("radar-basemap");
-    const overlay = document.getElementById("radar-overlay");
+    const baseUrl = buildStaticBaseMap();
+    const basePromise = new Promise((resolve) => {
+      basemap.onload = resolve;
+      basemap.onerror = resolve;
+      basemap.src = baseUrl;
+    });
 
-    // Use Stamen/Stadia dark tiles via a static image approach
-    // CartoDB dark matter tiles, assembled for our bbox
-    // bbox: lat 43.4-45.1, lon -89.6 to -87.2, center ~44.26, -88.42
-    const darkBaseUrl = buildStaticBaseMap();
-    basemap.src = darkBaseUrl;
+    // Build timestamps: last 2 hours in 10-min steps
+    const now = Date.now();
+    const times = [];
+    for (let i = 0; i < RADAR_FRAMES; i++) {
+      const t = now - (RADAR_FRAMES - 1 - i) * RADAR_INTERVAL_MS;
+      times.push(t);
+    }
 
-    // Radar overlay with cache-busting timestamp
-    const cacheBust = Date.now();
-    overlay.src = API.radar + `&_t=${cacheBust}`;
+    // Update time range labels
+    const startDate = new Date(times[0]);
+    document.getElementById("radar-time-start").textContent =
+      startDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    document.getElementById("radar-time-end").textContent = "Now";
 
-    // Wait for both images to load
-    await Promise.all([
-      new Promise((resolve, reject) => {
-        overlay.onload = resolve;
-        overlay.onerror = reject;
-      }),
-      new Promise((resolve) => {
-        basemap.onload = resolve;
-        basemap.onerror = resolve; // Don't block on basemap failure
-      }),
-    ]);
+    // Create and preload all radar frames
+    const container = document.getElementById("radar-frames-container");
+    container.innerHTML = "";
+    radarState.frames = [];
+
+    loadingEl.innerHTML = '<span class="loading">Loading radar frames...</span>';
+
+    const framePromises = times.map((t, i) => {
+      return new Promise((resolve) => {
+        const img = document.createElement("img");
+        img.className = i === RADAR_FRAMES - 1 ? "active-frame" : "";
+        img.alt = `Radar frame ${i + 1}`;
+        const url = `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${RADAR_BBOX_3857}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image&time=${t}`;
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+        container.appendChild(img);
+        radarState.frames.push({ time: new Date(t), img });
+      });
+    });
+
+    await Promise.all([basePromise, ...framePromises]);
+
+    // Set scrubber
+    const scrubber = document.getElementById("radar-scrubber");
+    scrubber.max = RADAR_FRAMES - 1;
+    radarState.currentFrame = RADAR_FRAMES - 1;
+    showRadarFrame(RADAR_FRAMES - 1);
 
     loadingEl.classList.add("hidden");
     mapEl.classList.remove("hidden");
-    timestampEl.textContent = `Radar updated ${formatTime(new Date())}`;
   } catch (err) {
     console.error("[FVW] Radar error:", err);
     loadingEl.innerHTML = `<span class="error-msg">Could not load radar. ${err.message}</span>`;
@@ -586,16 +690,9 @@ async function loadRadar() {
 }
 
 function buildStaticBaseMap() {
-  // Use OSM static map API for a dark-ish base
-  // Tile coordinates for zoom 8 around Appleton (44.26, -88.42)
-  // We'll use a single OpenStreetMap tile export as background
-  // Center: 44.26, -88.42, roughly zoom 8
-  // Using Stadia/Stamen dark tiles via individual tile compositing would be complex,
-  // so we use the ESRI dark gray canvas basemap which supports static export
   const bbox = "-89.6,43.4,-87.2,45.1";
   const [xmin, ymin, xmax, ymax] = bbox.split(",").map(Number);
 
-  // Convert to Web Mercator for ESRI
   function toMercator(lat, lon) {
     const x = lon * 20037508.34 / 180;
     const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 20037508.34 / Math.PI;

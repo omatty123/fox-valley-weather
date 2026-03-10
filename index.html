@@ -84,8 +84,22 @@
           <div id="radar-loading" class="loading">Loading radar...</div>
           <div id="radar-map" class="radar-map hidden">
             <img id="radar-basemap" class="radar-layer" alt="Base map">
-            <img id="radar-overlay" class="radar-layer" alt="Radar reflectivity">
+            <div id="radar-frames-container"></div>
             <div class="radar-marker"></div>
+          </div>
+        </div>
+        <div class="radar-controls">
+          <button id="radar-play" class="radar-play-btn" aria-label="Play/Pause">
+            <svg id="radar-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            <svg id="radar-pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+          </button>
+          <div class="radar-timeline">
+            <input type="range" id="radar-scrubber" min="0" max="11" value="11" class="radar-scrubber">
+            <div class="radar-time-labels">
+              <span id="radar-time-start">-2h</span>
+              <span id="radar-time-current" class="radar-time-now"></span>
+              <span id="radar-time-end">Now</span>
+            </div>
           </div>
         </div>
         <div class="radar-legend">
@@ -93,7 +107,6 @@
           <div class="legend-bar"></div>
           <span class="legend-label">Heavy</span>
         </div>
-        <p class="radar-timestamp" id="radar-timestamp"></p>
       </div>
     </section>
 
