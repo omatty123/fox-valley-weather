@@ -5,10 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Fox Valley Weather</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0b1929">
+  <meta name="theme-color" content="#0a0f1e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,15 +22,17 @@
   <!-- Header -->
   <header class="app-header">
     <div class="header-top">
-      <h1>Fox Valley Weather</h1>
+      <div>
+        <h1>Fox Valley Weather</h1>
+        <p class="location">Appleton, WI 54911</p>
+      </div>
       <button id="refresh-btn" class="refresh-btn" aria-label="Refresh data">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
         </svg>
       </button>
     </div>
-    <p class="location">Appleton, WI 54911</p>
     <p class="updated" id="last-updated"></p>
   </header>
 
@@ -62,16 +67,18 @@
     <!-- Forecast Discussion -->
     <section id="panel-discussion" class="panel" role="tabpanel">
       <div class="discussion-header">
-        <h2>Area Forecast Discussion</h2>
+        <div>
+          <h2>Area Forecast Discussion</h2>
+          <p class="discussion-subtitle">NWS Green Bay meteorologists</p>
+        </div>
         <div class="teaching-toggle">
           <label class="toggle-label">
+            <span class="toggle-text">Teach</span>
             <input type="checkbox" id="teaching-mode" checked>
             <span class="toggle-switch"></span>
-            Teaching Mode
           </label>
         </div>
       </div>
-      <p class="discussion-subtitle">Written by NWS Green Bay meteorologists</p>
       <div id="discussion-loading" class="loading">Loading forecast discussion...</div>
       <div id="discussion-content" class="hidden"></div>
     </section>
@@ -79,6 +86,7 @@
 
   <!-- Term tooltip (shared) -->
   <div id="term-tooltip" class="term-tooltip hidden" role="tooltip">
+    <div class="tooltip-handle"></div>
     <div class="tooltip-header">
       <span class="tooltip-term"></span>
       <button class="tooltip-close" aria-label="Close">&times;</button>
@@ -94,7 +102,6 @@
   </footer>
 
   <script>
-    // Global error handler — show JS errors on screen for debugging
     window.onerror = function(msg, src, line, col, err) {
       document.body.insertAdjacentHTML('afterbegin',
         '<div style="background:#ff4d4d;color:#fff;padding:12px 16px;font-size:13px;font-family:monospace;white-space:pre-wrap">'
