@@ -93,6 +93,19 @@
     <p>Data from <a href="https://www.weather.gov/grb" target="_blank" rel="noopener">NWS Green Bay</a></p>
   </footer>
 
+  <script>
+    // Global error handler — show JS errors on screen for debugging
+    window.onerror = function(msg, src, line, col, err) {
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div style="background:#ff4d4d;color:#fff;padding:12px 16px;font-size:13px;font-family:monospace;white-space:pre-wrap">'
+        + 'JS Error: ' + msg + '\n' + src + ':' + line + ':' + col + '</div>');
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div style="background:#ff4d4d;color:#fff;padding:12px 16px;font-size:13px;font-family:monospace;white-space:pre-wrap">'
+        + 'Promise Error: ' + (e.reason?.message || e.reason) + '</div>');
+    });
+  </script>
   <script src="glossary.js"></script>
   <script src="app.js"></script>
 </body>

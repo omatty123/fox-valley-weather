@@ -120,11 +120,15 @@ function initRefresh() {
 
 // ---- Data Loading ----
 async function apiFetch(url) {
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  console.log("[FVW] Fetching:", url);
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error("[FVW] API error:", res.status, url);
+    throw new Error(`API error: ${res.status} for ${url}`);
+  }
+  const data = await res.json();
+  console.log("[FVW] OK:", url);
+  return data;
 }
 
 async function loadAllData() {
