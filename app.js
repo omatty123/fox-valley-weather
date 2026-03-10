@@ -44,7 +44,12 @@ document.addEventListener("DOMContentLoaded", () => {
 // ---- Service Worker ----
 function registerSW() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // Unregister old SW first, then register fresh
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister());
+    }).then(() => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
   }
 }
 
