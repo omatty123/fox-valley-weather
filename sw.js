@@ -3,7 +3,7 @@
 // Cache-first for app shell, network-first for API
 // ============================================
 
-const CACHE_NAME = "fvw-v3";
+const CACHE_NAME = "fvw-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const APP_SHELL = [
   "./app.js",
   "./glossary.js",
   "./manifest.json",
+  "./appleton-bg.jpg",
 ];
 
 // Install: cache app shell
