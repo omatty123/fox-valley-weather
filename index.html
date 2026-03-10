@@ -41,6 +41,7 @@
     <button class="tab active" data-tab="current" role="tab" aria-selected="true">Now</button>
     <button class="tab" data-tab="hourly" role="tab" aria-selected="false">Hourly</button>
     <button class="tab" data-tab="forecast" role="tab" aria-selected="false">7-Day</button>
+    <button class="tab" data-tab="radar" role="tab" aria-selected="false">Radar</button>
     <button class="tab" data-tab="discussion" role="tab" aria-selected="false">Discussion</button>
   </nav>
 
@@ -62,6 +63,38 @@
     <section id="panel-forecast" class="panel" role="tabpanel">
       <div id="forecast-loading" class="loading">Loading 7-day forecast...</div>
       <div id="forecast-content" class="hidden"></div>
+    </section>
+
+    <!-- Radar -->
+    <section id="panel-radar" class="panel" role="tabpanel">
+      <div class="radar-container">
+        <div class="radar-header">
+          <div>
+            <h2>Local Radar</h2>
+            <p class="radar-subtitle">KGRB Green Bay NEXRAD</p>
+          </div>
+          <button id="radar-refresh" class="refresh-btn" aria-label="Refresh radar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+        </div>
+        <div class="radar-frame">
+          <div id="radar-loading" class="loading">Loading radar...</div>
+          <div id="radar-map" class="radar-map hidden">
+            <img id="radar-basemap" class="radar-layer" alt="Base map">
+            <img id="radar-overlay" class="radar-layer" alt="Radar reflectivity">
+            <div class="radar-marker"></div>
+          </div>
+        </div>
+        <div class="radar-legend">
+          <span class="legend-label">Light</span>
+          <div class="legend-bar"></div>
+          <span class="legend-label">Heavy</span>
+        </div>
+        <p class="radar-timestamp" id="radar-timestamp"></p>
+      </div>
     </section>
 
     <!-- Forecast Discussion -->

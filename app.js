@@ -18,7 +18,23 @@ const API = {
   stations: `https://api.weather.gov/gridpoints/${CONFIG.gridOffice}/${CONFIG.gridX},${CONFIG.gridY}/stations`,
   afd: `https://api.weather.gov/products/types/AFD/locations/${CONFIG.gridOffice}`,
   alerts: `https://api.weather.gov/alerts/active?point=${CONFIG.lat},${CONFIG.lon}`,
+  radar: buildRadarUrl(),
+  radarBase: buildRadarBaseUrl(),
 };
+
+function buildRadarUrl() {
+  // NOAA RIDGE2 radar reflectivity, ~150km box around Appleton
+  // Bounding box in EPSG:3857 (Web Mercator)
+  const bbox = "-9974226,5373055,-9707060,5637278";
+  return `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image&transparent=true`;
+}
+
+function buildRadarBaseUrl() {
+  // Dark-themed base map from CartoDB/CARTO
+  // We'll use a static tile composite via OSM static map
+  const bbox = "-89.6,43.4,-87.2,45.1";
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
+}
 
 // ---- State ----
 let state = {
@@ -37,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTeachingToggle();
   initTooltip();
   initRefresh();
+  initRadar();
   loadAllData();
   registerSW();
 });
@@ -145,6 +162,7 @@ async function loadAllData() {
     loadObservations(),
     loadForecast(),
     loadHourly(),
+    loadRadar(),
     loadAFD(),
   ]);
 
@@ -514,6 +532,79 @@ function parseAFDSections(text) {
   }
 
   return sections;
+}
+
+// ---- Radar ----
+function initRadar() {
+  document.getElementById("radar-refresh").addEventListener("click", () => {
+    loadRadar();
+  });
+}
+
+async function loadRadar() {
+  const loadingEl = document.getElementById("radar-loading");
+  const mapEl = document.getElementById("radar-map");
+  const timestampEl = document.getElementById("radar-timestamp");
+
+  loadingEl.classList.remove("hidden");
+  mapEl.classList.add("hidden");
+
+  try {
+    // Load dark base map tiles as a composite image
+    const basemap = document.getElementById("radar-basemap");
+    const overlay = document.getElementById("radar-overlay");
+
+    // Use Stamen/Stadia dark tiles via a static image approach
+    // CartoDB dark matter tiles, assembled for our bbox
+    // bbox: lat 43.4-45.1, lon -89.6 to -87.2, center ~44.26, -88.42
+    const darkBaseUrl = buildStaticBaseMap();
+    basemap.src = darkBaseUrl;
+
+    // Radar overlay with cache-busting timestamp
+    const cacheBust = Date.now();
+    overlay.src = API.radar + `&_t=${cacheBust}`;
+
+    // Wait for both images to load
+    await Promise.all([
+      new Promise((resolve, reject) => {
+        overlay.onload = resolve;
+        overlay.onerror = reject;
+      }),
+      new Promise((resolve) => {
+        basemap.onload = resolve;
+        basemap.onerror = resolve; // Don't block on basemap failure
+      }),
+    ]);
+
+    loadingEl.classList.add("hidden");
+    mapEl.classList.remove("hidden");
+    timestampEl.textContent = `Radar updated ${formatTime(new Date())}`;
+  } catch (err) {
+    console.error("[FVW] Radar error:", err);
+    loadingEl.innerHTML = `<span class="error-msg">Could not load radar. ${err.message}</span>`;
+  }
+}
+
+function buildStaticBaseMap() {
+  // Use OSM static map API for a dark-ish base
+  // Tile coordinates for zoom 8 around Appleton (44.26, -88.42)
+  // We'll use a single OpenStreetMap tile export as background
+  // Center: 44.26, -88.42, roughly zoom 8
+  // Using Stadia/Stamen dark tiles via individual tile compositing would be complex,
+  // so we use the ESRI dark gray canvas basemap which supports static export
+  const bbox = "-89.6,43.4,-87.2,45.1";
+  const [xmin, ymin, xmax, ymax] = bbox.split(",").map(Number);
+
+  // Convert to Web Mercator for ESRI
+  function toMercator(lat, lon) {
+    const x = lon * 20037508.34 / 180;
+    const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 20037508.34 / Math.PI;
+    return [x, y];
+  }
+  const sw = toMercator(ymin, xmin);
+  const ne = toMercator(ymax, xmax);
+
+  return `https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/export?bbox=${sw[0]},${sw[1]},${ne[0]},${ne[1]}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image`;
 }
 
 // ---- Utilities ----

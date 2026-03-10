@@ -3,7 +3,7 @@
 // Cache-first for app shell, network-first for API
 // ============================================
 
-const CACHE_NAME = "fvw-v4";
+const CACHE_NAME = "fvw-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
