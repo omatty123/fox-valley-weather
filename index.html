@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Fox Valley Weather</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b1929">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Alert banner (hidden by default) -->
+  <div id="alert-banner" class="alert-banner hidden" role="alert"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-top">
+      <h1>Fox Valley Weather</h1>
+      <button id="refresh-btn" class="refresh-btn" aria-label="Refresh data">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+      </button>
+    </div>
+    <p class="location">Appleton, WI 54911</p>
+    <p class="updated" id="last-updated"></p>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="tab-bar" role="tablist">
+    <button class="tab active" data-tab="current" role="tab" aria-selected="true">Now</button>
+    <button class="tab" data-tab="hourly" role="tab" aria-selected="false">Hourly</button>
+    <button class="tab" data-tab="forecast" role="tab" aria-selected="false">7-Day</button>
+    <button class="tab" data-tab="discussion" role="tab" aria-selected="false">Discussion</button>
+  </nav>
+
+  <!-- Content -->
+  <main>
+    <!-- Current Conditions -->
+    <section id="panel-current" class="panel active" role="tabpanel">
+      <div id="current-loading" class="loading">Loading current conditions...</div>
+      <div id="current-content" class="hidden"></div>
+    </section>
+
+    <!-- Hourly Forecast -->
+    <section id="panel-hourly" class="panel" role="tabpanel">
+      <div id="hourly-loading" class="loading">Loading hourly forecast...</div>
+      <div id="hourly-content" class="hidden"></div>
+    </section>
+
+    <!-- 7-Day Forecast -->
+    <section id="panel-forecast" class="panel" role="tabpanel">
+      <div id="forecast-loading" class="loading">Loading 7-day forecast...</div>
+      <div id="forecast-content" class="hidden"></div>
+    </section>
+
+    <!-- Forecast Discussion -->
+    <section id="panel-discussion" class="panel" role="tabpanel">
+      <div class="discussion-header">
+        <h2>Area Forecast Discussion</h2>
+        <div class="teaching-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" id="teaching-mode" checked>
+            <span class="toggle-switch"></span>
+            Teaching Mode
+          </label>
+        </div>
+      </div>
+      <p class="discussion-subtitle">Written by NWS Green Bay meteorologists</p>
+      <div id="discussion-loading" class="loading">Loading forecast discussion...</div>
+      <div id="discussion-content" class="hidden"></div>
+    </section>
+  </main>
+
+  <!-- Term tooltip (shared) -->
+  <div id="term-tooltip" class="term-tooltip hidden" role="tooltip">
+    <div class="tooltip-header">
+      <span class="tooltip-term"></span>
+      <button class="tooltip-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="tooltip-body"></div>
+  </div>
+
+  <!-- Overlay for tooltip -->
+  <div id="tooltip-overlay" class="tooltip-overlay hidden"></div>
+
+  <footer>
+    <p>Data from <a href="https://www.weather.gov/grb" target="_blank" rel="noopener">NWS Green Bay</a></p>
+  </footer>
+
+  <script src="glossary.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
