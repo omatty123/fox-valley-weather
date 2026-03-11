@@ -757,7 +757,7 @@ body {
 
 .radar-frame {
   position: relative;
-  width: 100%;
+  width: 60%;
   aspect-ratio: 5 / 4;
   border: 1px solid var(--border);
   overflow: hidden;
