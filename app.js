@@ -652,12 +652,12 @@ function initRadar() {
     stopRadarPlay();
     loadRadar();
   });
-  document.getElementById("radar-zoom-in").addEventListener("click", () => {
+  document.getElementById("radar-zoom-in")?.addEventListener("click", () => {
     radarState.zoom = Math.max(0.3, radarState.zoom - 0.3);
     stopRadarPlay();
     loadRadar();
   });
-  document.getElementById("radar-zoom-out").addEventListener("click", () => {
+  document.getElementById("radar-zoom-out")?.addEventListener("click", () => {
     radarState.zoom = Math.min(3.0, radarState.zoom + 0.3);
     stopRadarPlay();
     loadRadar();
