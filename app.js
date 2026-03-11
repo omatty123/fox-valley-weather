@@ -370,7 +370,7 @@ function renderCurrent() {
   if (windChill != null) feelsLike = Math.round(windChill * 9 / 5 + 32);
   else if (heatIndex != null) feelsLike = Math.round(heatIndex * 9 / 5 + 32);
 
-  const windDisplay = windMph === 0 ? "Calm" : `${windDir} ${windMph} mph${gustMph ? ` (gusts ${gustMph})` : ""}`;
+  const windDisplay = windMph === 0 ? "Calm" : `${windDir} ${windMph}${gustMph ? ` G ${gustMph}` : ""}`;
 
   el.innerHTML = `
     <div class="current-hero">
