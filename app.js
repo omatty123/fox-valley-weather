@@ -126,6 +126,9 @@ async function resolveLocation() {
 }
 
 // ---- Tab Navigation ----
+let radarLoaded = false;
+let afdLoaded = false;
+
 function initTabs() {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -137,6 +140,17 @@ function initTabs() {
       tab.classList.add("active");
       tab.setAttribute("aria-selected", "true");
       document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+
+      // Lazy-load radar on first tap
+      if (tab.dataset.tab === "radar" && !radarLoaded && loc.ready) {
+        radarLoaded = true;
+        loadRadar();
+      }
+      // Lazy-load discussion on first tap
+      if (tab.dataset.tab === "discussion" && !afdLoaded && loc.ready) {
+        afdLoaded = true;
+        loadAFD();
+      }
     });
   });
 }
@@ -199,13 +213,13 @@ async function loadAllData() {
   const btn = document.getElementById("refresh-btn");
   btn.classList.add("spinning");
 
+  radarLoaded = false;
+  afdLoaded = false;
   await Promise.allSettled([
     loadAlerts(),
     loadObservations(),
     loadForecast(),
     loadHourly(),
-    loadRadar(),
-    loadAFD(),
   ]);
 
   btn.classList.remove("spinning");
@@ -289,6 +303,46 @@ async function loadObservations() {
   }
 }
 
+function renderTodayForecast() {
+  if (!state.forecast?.length) return "";
+  const today = state.forecast[0];
+  const tonight = state.forecast[1];
+  let html = '<div class="today-forecast">';
+  if (today) {
+    html += `<div class="today-block">
+      <div class="today-label">${today.name}</div>
+      <div class="today-text">${today.detailedForecast}</div>
+    </div>`;
+  }
+  if (tonight && !tonight.isDaytime) {
+    html += `<div class="today-block">
+      <div class="today-label">${tonight.name}</div>
+      <div class="today-text">${tonight.detailedForecast}</div>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderMiniHourly() {
+  if (!state.hourly?.length) return "";
+  const next = state.hourly.slice(0, 8);
+  let html = '<div class="mini-hourly"><div class="today-label">Next 8 Hours</div><div class="mini-hourly-row">';
+  next.forEach((p, i) => {
+    const dt = new Date(p.startTime);
+    const timeStr = i === 0 ? "Now" : dt.toLocaleTimeString("en-US", { hour: "numeric" });
+    const precip = p.probabilityOfPrecipitation?.value;
+    html += `<div class="mini-hour">
+      <span class="mini-time">${timeStr}</span>
+      <img class="mini-icon" src="${p.icon}" alt="${p.shortForecast}">
+      <span class="mini-temp">${p.temperature}°</span>
+      ${precip && precip > 0 ? `<span class="mini-precip">${precip}%</span>` : ""}
+    </div>`;
+  });
+  html += '</div></div>';
+  return html;
+}
+
 function renderCurrent() {
   const obs = state.observations;
   const el = document.getElementById("current-content");
@@ -320,38 +374,24 @@ function renderCurrent() {
 
   el.innerHTML = `
     <div class="current-hero">
-      <div>
-        <div class="current-temp">${tempF}<span class="unit">°F</span></div>
-        <div class="current-condition">${condition}</div>
-      </div>
       ${iconUrl ? `<img class="current-icon" src="${iconUrl}" alt="${condition}">` : ""}
+      <div class="current-main">
+        <div class="current-condition">${condition}</div>
+        <div class="current-temp">${tempF}<span class="unit">°F</span></div>
+      </div>
+      <table class="conditions-table">
+        <tr><td>Humidity</td><td>${humidity}%</td></tr>
+        <tr><td>Wind Speed</td><td>${windDisplay}</td></tr>
+        <tr><td>Barometer</td><td>${pressureInHg} in</td></tr>
+      </table>
+      <table class="conditions-table">
+        <tr><td>Dewpoint</td><td>${dewF}°F</td></tr>
+        <tr><td>Visibility</td><td>${visMiles} mi</td></tr>
+        <tr><td>Feels Like</td><td>${feelsLike}°F</td></tr>
+      </table>
     </div>
-    <div class="current-details">
-      <div class="detail-card">
-        <div class="detail-label">Feels Like</div>
-        <div class="detail-value ${feelsLike > tempF ? 'warm' : feelsLike < tempF ? 'cool' : ''}">${feelsLike}°F</div>
-      </div>
-      <div class="detail-card">
-        <div class="detail-label">Humidity</div>
-        <div class="detail-value">${humidity}%</div>
-      </div>
-      <div class="detail-card">
-        <div class="detail-label">Dewpoint</div>
-        <div class="detail-value">${dewF}°F</div>
-      </div>
-      <div class="detail-card">
-        <div class="detail-label">Wind</div>
-        <div class="detail-value">${windDisplay}</div>
-      </div>
-      <div class="detail-card">
-        <div class="detail-label">Pressure</div>
-        <div class="detail-value">${pressureInHg}" Hg</div>
-      </div>
-      <div class="detail-card">
-        <div class="detail-label">Visibility</div>
-        <div class="detail-value">${visMiles} mi</div>
-      </div>
-    </div>
+    ${renderTodayForecast()}
+    ${renderMiniHourly()}
   `;
 }
 
@@ -374,37 +414,19 @@ async function loadForecast() {
 function renderForecast() {
   const el = document.getElementById("forecast-content");
   const periods = state.forecast;
-  const days = [];
-
-  for (let i = 0; i < periods.length; i++) {
-    const p = periods[i];
-    if (p.isDaytime) {
-      days.push({ day: p, night: periods[i + 1] || null });
-    } else if (i === 0) {
-      days.push({ day: null, night: p });
-    }
-  }
 
   el.innerHTML = `
-    <div class="forecast-list">
-      ${days.map((d) => {
-        const dayP = d.day;
-        const nightP = d.night;
-        const label = dayP ? dayP.name : nightP.name;
-        const icon = (dayP || nightP).icon;
-        const desc = (dayP || nightP).shortForecast;
-        const high = dayP ? `${dayP.temperature}°` : "";
-        const low = nightP ? `${nightP.temperature}°` : "";
-        const detail = dayP?.detailedForecast || nightP?.detailedForecast || "";
-        const dateStr = formatShortDate(new Date((dayP || nightP).startTime));
+    <div class="forecast-strip">
+      ${periods.map((p) => {
+        const isHigh = p.isDaytime;
+        const tempLabel = isHigh ? `High: ${p.temperature} °F` : `Low: ${p.temperature} °F`;
         return `
-          <div class="forecast-row" onclick="this.classList.toggle('expanded')">
-            <div class="forecast-day">${label}<span class="date">${dateStr}</span></div>
-            <img class="forecast-icon" src="${icon}" alt="${desc}">
-            <div class="forecast-desc">${desc}</div>
-            <div class="forecast-high">${high}</div>
-            <div class="forecast-low">${low}</div>
-            <div class="forecast-detail-expand">${detail}</div>
+          <div class="forecast-day-col" onclick="this.classList.toggle('expanded')">
+            <div class="forecast-period-name">${p.name}</div>
+            <img class="forecast-col-icon" src="${p.icon}" alt="${p.shortForecast}">
+            <div class="forecast-col-temp ${isHigh ? 'is-high' : 'is-low'}">${tempLabel}</div>
+            <div class="forecast-col-desc">${p.shortForecast}</div>
+            <div class="forecast-col-detail">${p.detailedForecast}</div>
           </div>
         `;
       }).join("")}
@@ -489,6 +511,67 @@ async function loadAFD() {
   }
 }
 
+function cleanAFDText(raw) {
+  // NWS AFD comes in ALL CAPS with hard wraps at ~68 chars.
+  // 1. Unwrap hard line breaks, keep paragraph breaks
+  // 2. Convert to sentence case with smart recapitalization
+  let text = raw
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")           // normalize excessive breaks
+    .replace(/\n\n/g, "{{PARA}}")         // preserve paragraph breaks
+    .replace(/([^\n])\n(?!\{)/g, "$1 ")   // unwrap single newlines
+    .replace(/ {2,}/g, " ")               // collapse double spaces
+    .trim();
+
+  // Sentence case: lowercase, then capitalize sentence starts
+  text = text.toLowerCase();
+  text = text.replace(/(^|[.?!]\s+)(\w)/g, (_, pre, ch) => pre + ch.toUpperCase());
+  // Also capitalize after paragraph markers
+  text = text.replace(/(\{\{para\}\}\s*)(\w)/gi, (_, pre, ch) => pre + ch.toUpperCase());
+
+  // Re-capitalize known abbreviations, directions, units, models, offices
+  const abbrevs = [
+    // NWS offices
+    /\bnws\b/g, /\bgrb\b/g, /\bmkx\b/g, /\bdlh\b/g, /\bmpx\b/g, /\barx\b/g,
+    // Models
+    /\bgfs\b/g, /\bnam\b/g, /\brap\b/g, /\bhrrr\b/g, /\becmwf\b/g, /\beps\b/g,
+    /\bgefs\b/g, /\bnbm\b/g, /\bwpc\b/g, /\bspc\b/g, /\bcwa\b/g,
+    // Units & time
+    /\bmph\b/g, /\bmb\b/g, /\butc\b/g, /\bcdt\b/g, /\bcst\b/g, /\best\b/g,
+    /\b(\d+)\s*z\b/g,
+    // Compass directions (only when standalone or paired like NNW)
+    /\b([nsew]{1,3})\b(?=\s+\d|\s+wind|\s+of\b|\s+flow)/g,
+    // States
+    /\bwi\b/g, /\bmi\b/g, /\bmn\b/g, /\bia\b/g, /\bil\b/g,
+    // Days of week
+    /\b(mon|tue|wed|thu|fri|sat|sun)\b/g,
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g,
+  ];
+  abbrevs.forEach(re => {
+    text = text.replace(re, m => m.toUpperCase());
+  });
+
+  // Capitalize proper nouns commonly in WI/upper midwest AFDs
+  const properNouns = [
+    'appleton', 'green bay', 'milwaukee', 'madison', 'oshkosh', 'wausau',
+    'fond du lac', 'sheboygan', 'manitowoc', 'fox valley', 'lake michigan',
+    'lake winnebago', 'lake superior', 'mississippi', 'wisconsin', 'michigan',
+    'minnesota', 'iowa', 'illinois', 'chicago', 'duluth', 'marquette',
+    'arctic', 'canada', 'canadian', 'pacific', 'atlantic', 'rockies',
+    'great lakes', 'hudson bay',
+  ];
+  properNouns.forEach(noun => {
+    const re = new RegExp('\\b' + noun.replace(/ /g, '\\s+') + '\\b', 'gi');
+    text = text.replace(re, m => m.split(/(\s+)/).map(w =>
+      /\s/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)
+    ).join(''));
+  });
+
+  // Restore paragraph breaks (case-insensitive since toLowerCase hit the markers)
+  text = text.replace(/\{\{para\}\}/gi, "\n\n");
+  return text;
+}
+
 function renderAFD() {
   const el = document.getElementById("discussion-content");
   const afd = state.afd;
@@ -506,9 +589,10 @@ function renderAFD() {
   }
 
   sections.forEach((section) => {
+    const cleaned = cleanAFDText(section.body.trim());
     const bodyHtml = state.teachingMode
-      ? highlightTerms(section.body.trim())
-      : escapeHtml(section.body.trim());
+      ? highlightTerms(cleaned)
+      : escapeHtml(cleaned);
     html += `
       <div class="afd-section">
         <div class="afd-section-title">${escapeHtml(section.title)}</div>
@@ -518,7 +602,8 @@ function renderAFD() {
   });
 
   if (!sections.length) {
-    const bodyHtml = state.teachingMode ? highlightTerms(text) : escapeHtml(text);
+    const cleaned = cleanAFDText(text);
+    const bodyHtml = state.teachingMode ? highlightTerms(cleaned) : escapeHtml(cleaned);
     html += `<div class="afd-section"><div class="afd-section-body">${bodyHtml}</div></div>`;
   }
 
@@ -636,17 +721,19 @@ async function loadRadar() {
   try {
     const bbox3857 = getRadarBbox3857();
 
-    // Dark base map
+    const imgSize = `${Math.round(window.devicePixelRatio * 700)},${Math.round(window.devicePixelRatio * 560)}`;
+
+    // Street basemap with cities, roads, borders
     const basemap = document.getElementById("radar-basemap");
-    const baseUrl = `https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/export?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image`;
+    const baseUrl = `https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/export?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=${imgSize}&format=png32&f=image`;
     const basePromise = new Promise((resolve) => {
       basemap.onload = resolve;
       basemap.onerror = resolve;
       basemap.src = baseUrl;
     });
 
-    // Timestamps: last 2 hours
-    const now = Date.now();
+    // Timestamps: last 2 hours, offset 15 min to avoid blank latest frame
+    const now = Date.now() - 15 * 60 * 1000;
     const times = [];
     for (let i = 0; i < RADAR_FRAMES; i++) {
       times.push(now - (RADAR_FRAMES - 1 - i) * RADAR_INTERVAL_MS);
@@ -668,7 +755,7 @@ async function loadRadar() {
         const img = document.createElement("img");
         img.className = i === RADAR_FRAMES - 1 ? "active-frame" : "";
         img.alt = `Radar frame ${i + 1}`;
-        img.src = `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image&time=${t}`;
+        img.src = `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=${imgSize}&format=png32&f=image&time=${t}`;
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
         container.appendChild(img);
@@ -676,7 +763,16 @@ async function loadRadar() {
       });
     });
 
-    await Promise.all([basePromise, ...framePromises]);
+    // Reference overlay: city labels, borders, counties on top of radar
+    const refImg = document.getElementById("radar-reference");
+    const refUrl = `https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Reference_Overlay/MapServer/export?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=${imgSize}&format=png32&f=image&transparent=true`;
+    const refPromise = new Promise((resolve) => {
+      refImg.onload = resolve;
+      refImg.onerror = resolve;
+      refImg.src = refUrl;
+    });
+
+    await Promise.all([basePromise, refPromise, ...framePromises]);
 
     const scrubber = document.getElementById("radar-scrubber");
     scrubber.max = RADAR_FRAMES - 1;

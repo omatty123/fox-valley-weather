@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>NWS Weather</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0a0f1e">
+  <meta name="theme-color" content="#f0f2f5">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -85,6 +85,7 @@
           <div id="radar-map" class="radar-map hidden">
             <img id="radar-basemap" class="radar-layer" alt="Base map">
             <div id="radar-frames-container"></div>
+            <img id="radar-reference" class="radar-layer" alt="Reference overlay">
             <div class="radar-marker"></div>
           </div>
         </div>
@@ -145,7 +146,6 @@
 
   <footer>
     <p>Data from <a href="https://www.weather.gov" target="_blank" rel="noopener">National Weather Service</a></p>
-    <p>Photo: Appleton, WI via <a href="https://commons.wikimedia.org/wiki/File:Appleton_Facing_East.JPG" target="_blank" rel="noopener">Wikimedia Commons</a> (CC)</p>
   </footer>
 
   <script>

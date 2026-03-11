@@ -4,8 +4,8 @@
   "description": "Weather.gov as an app. Forecast, radar, and scientific discussion with teaching mode.",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#0b1929",
-  "theme_color": "#0b1929",
+  "background_color": "#f0f2f5",
+  "theme_color": "#f0f2f5",
   "orientation": "portrait-primary",
   "icons": [
     {
