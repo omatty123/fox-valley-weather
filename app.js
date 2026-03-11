@@ -638,6 +638,7 @@ let radarState = {
   currentFrame: 0,
   playing: false,
   playTimer: null,
+  zoom: 1.2, // degSpread - smaller = more zoomed in
 };
 
 function initRadar() {
@@ -648,6 +649,16 @@ function initRadar() {
     showRadarFrame(radarState.currentFrame);
   });
   document.getElementById("radar-refresh").addEventListener("click", () => {
+    stopRadarPlay();
+    loadRadar();
+  });
+  document.getElementById("radar-zoom-in").addEventListener("click", () => {
+    radarState.zoom = Math.max(0.3, radarState.zoom - 0.3);
+    stopRadarPlay();
+    loadRadar();
+  });
+  document.getElementById("radar-zoom-out").addEventListener("click", () => {
+    radarState.zoom = Math.min(3.0, radarState.zoom + 0.3);
     stopRadarPlay();
     loadRadar();
   });
@@ -692,8 +703,7 @@ function showRadarFrame(idx) {
 }
 
 function getRadarBbox3857() {
-  // ~150km box around current location in Web Mercator
-  const degSpread = 1.2; // ~1.2 degrees in each direction
+  const degSpread = radarState.zoom;
   const latMin = loc.lat - degSpread * 0.65;
   const latMax = loc.lat + degSpread * 0.65;
   const lonMin = loc.lon - degSpread;

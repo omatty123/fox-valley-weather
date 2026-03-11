@@ -755,6 +755,24 @@ body {
   margin-top: 1px;
 }
 
+.radar-zoom-btns {
+  display: flex;
+  gap: 2px;
+}
+
+.radar-zoom-btn {
+  width: 28px; height: 28px;
+  background: #eee;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text);
+  line-height: 1;
+}
+.radar-zoom-btn:hover { background: #ddd; }
+
 .radar-frame {
   position: relative;
   width: 60%;
