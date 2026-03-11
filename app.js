@@ -1,39 +1,26 @@
 // ============================================
-// Fox Valley Weather — Main Application
-// Appleton, WI 54911 / NWS Green Bay (GRB)
+// NWS Weather — Location-Aware PWA
+// Wraps weather.gov for any US location
 // ============================================
 
-const CONFIG = {
-  gridOffice: "GRB",
-  gridX: 66,
-  gridY: 20,
-  lat: 44.2619,
-  lon: -88.4154,
-  userAgent: "FoxValleyWeather (github.com/omatty123/fox-valley-weather)",
+// ---- Location & Config (resolved dynamically) ----
+let loc = {
+  lat: null,
+  lon: null,
+  city: "",
+  state: "",
+  office: "",
+  gridX: 0,
+  gridY: 0,
+  radarStation: "",
+  ready: false,
 };
 
-const API = {
-  forecast: `https://api.weather.gov/gridpoints/${CONFIG.gridOffice}/${CONFIG.gridX},${CONFIG.gridY}/forecast`,
-  hourly: `https://api.weather.gov/gridpoints/${CONFIG.gridOffice}/${CONFIG.gridX},${CONFIG.gridY}/forecast/hourly`,
-  stations: `https://api.weather.gov/gridpoints/${CONFIG.gridOffice}/${CONFIG.gridX},${CONFIG.gridY}/stations`,
-  afd: `https://api.weather.gov/products/types/AFD/locations/${CONFIG.gridOffice}`,
-  alerts: `https://api.weather.gov/alerts/active?point=${CONFIG.lat},${CONFIG.lon}`,
-  radar: buildRadarUrl(),
-  radarBase: buildRadarBaseUrl(),
-};
+// Fallback: Appleton, WI
+const FALLBACK = { lat: 44.2619, lon: -88.4154 };
 
-function buildRadarUrl() {
-  // NOAA RIDGE2 radar reflectivity, ~150km box around Appleton
-  // Bounding box in EPSG:3857 (Web Mercator)
-  const bbox = "-9974226,5373055,-9707060,5637278";
-  return `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image&transparent=true`;
-}
-
-function buildRadarBaseUrl() {
-  // Dark-themed base map from CartoDB/CARTO
-  // We'll use a static tile composite via OSM static map
-  const bbox = "-89.6,43.4,-87.2,45.1";
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
+function apiUrl(path) {
+  return `https://api.weather.gov${path}`;
 }
 
 // ---- State ----
@@ -54,20 +41,88 @@ document.addEventListener("DOMContentLoaded", () => {
   initTooltip();
   initRefresh();
   initRadar();
-  loadAllData();
   registerSW();
+  resolveLocation();
 });
 
 // ---- Service Worker ----
 function registerSW() {
   if ("serviceWorker" in navigator) {
-    // Unregister old SW first, then register fresh
     navigator.serviceWorker.getRegistrations().then((regs) => {
       regs.forEach((r) => r.unregister());
     }).then(() => {
       navigator.serviceWorker.register("sw.js").catch(() => {});
     });
   }
+}
+
+// ---- Geolocation ----
+async function resolveLocation() {
+  const locationEl = document.querySelector(".location");
+  locationEl.textContent = "Detecting location...";
+
+  let lat, lon;
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 300000, // 5 min cache
+      });
+    });
+    lat = pos.coords.latitude;
+    lon = pos.coords.longitude;
+  } catch (err) {
+    console.log("[NWS] Geolocation failed, using fallback:", err.message);
+    lat = FALLBACK.lat;
+    lon = FALLBACK.lon;
+  }
+
+  loc.lat = lat;
+  loc.lon = lon;
+
+  // Resolve NWS grid point
+  try {
+    const pointData = await apiFetch(apiUrl(`/points/${lat.toFixed(4)},${lon.toFixed(4)}`));
+    const props = pointData.properties;
+    loc.office = props.gridId;
+    loc.gridX = props.gridX;
+    loc.gridY = props.gridY;
+    loc.radarStation = props.radarStation || "";
+    loc.city = props.relativeLocation?.properties?.city || "";
+    loc.state = props.relativeLocation?.properties?.state || "";
+    loc.ready = true;
+
+    locationEl.textContent = loc.city && loc.state ? `${loc.city}, ${loc.state}` : `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+
+    // Update page title
+    if (loc.city) {
+      document.title = `${loc.city} Weather`;
+      document.querySelector(".app-header h1").textContent = `${loc.city} Weather`;
+    }
+
+    // Update discussion subtitle
+    const subEl = document.querySelector(".discussion-subtitle");
+    if (subEl) subEl.textContent = `NWS ${loc.office} meteorologists`;
+
+    // Update radar subtitle
+    const radarSub = document.querySelector(".radar-subtitle");
+    if (radarSub) radarSub.textContent = `${loc.radarStation || loc.office} NEXRAD`;
+
+  } catch (err) {
+    locationEl.textContent = "Location error. Using defaults.";
+    console.error("[NWS] Points API failed:", err);
+    // Set Appleton fallback
+    loc.office = "GRB";
+    loc.gridX = 66;
+    loc.gridY = 20;
+    loc.lat = FALLBACK.lat;
+    loc.lon = FALLBACK.lon;
+    loc.ready = true;
+  }
+
+  loadAllData();
 }
 
 // ---- Tab Navigation ----
@@ -79,11 +134,9 @@ function initTabs() {
         t.setAttribute("aria-selected", "false");
       });
       document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-
       tab.classList.add("active");
       tab.setAttribute("aria-selected", "true");
-      const panelId = `panel-${tab.dataset.tab}`;
-      document.getElementById(panelId).classList.add("active");
+      document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
     });
   });
 }
@@ -94,11 +147,7 @@ function initTeachingToggle() {
   toggle.addEventListener("change", () => {
     state.teachingMode = toggle.checked;
     const content = document.getElementById("discussion-content");
-    if (toggle.checked) {
-      content.classList.remove("teaching-off");
-    } else {
-      content.classList.add("teaching-off");
-    }
+    content.classList.toggle("teaching-off", !toggle.checked);
   });
 }
 
@@ -106,26 +155,20 @@ function initTeachingToggle() {
 function initTooltip() {
   const tooltip = document.getElementById("term-tooltip");
   const overlay = document.getElementById("tooltip-overlay");
-  const closeBtn = tooltip.querySelector(".tooltip-close");
 
-  // Close tooltip
   function closeTooltip() {
     tooltip.classList.add("hidden");
     overlay.classList.add("hidden");
   }
 
-  closeBtn.addEventListener("click", closeTooltip);
+  tooltip.querySelector(".tooltip-close").addEventListener("click", closeTooltip);
   overlay.addEventListener("click", closeTooltip);
 
-  // Delegate click on terms
   document.addEventListener("click", (e) => {
     const termEl = e.target.closest(".term");
     if (!termEl || !state.teachingMode) return;
-
-    const key = termEl.dataset.term;
-    const entry = GLOSSARY[key];
+    const entry = GLOSSARY[termEl.dataset.term];
     if (!entry) return;
-
     tooltip.querySelector(".tooltip-term").textContent = entry.term;
     tooltip.querySelector(".tooltip-body").innerHTML = entry.definition;
     tooltip.classList.remove("hidden");
@@ -136,24 +179,23 @@ function initTooltip() {
 // ---- Refresh ----
 function initRefresh() {
   document.getElementById("refresh-btn").addEventListener("click", () => {
-    loadAllData();
+    if (loc.ready) loadAllData();
   });
 }
 
 // ---- Data Loading ----
 async function apiFetch(url) {
-  console.log("[FVW] Fetching:", url);
+  console.log("[NWS] Fetching:", url);
   const res = await fetch(url);
   if (!res.ok) {
-    console.error("[FVW] API error:", res.status, url);
-    throw new Error(`API error: ${res.status} for ${url}`);
+    console.error("[NWS] API error:", res.status, url);
+    throw new Error(`API error: ${res.status}`);
   }
-  const data = await res.json();
-  console.log("[FVW] OK:", url);
-  return data;
+  return res.json();
 }
 
 async function loadAllData() {
+  if (!loc.ready) return;
   const btn = document.getElementById("refresh-btn");
   btn.classList.add("spinning");
 
@@ -173,7 +215,7 @@ async function loadAllData() {
 // ---- Alerts ----
 async function loadAlerts() {
   try {
-    const data = await apiFetch(API.alerts);
+    const data = await apiFetch(apiUrl(`/alerts/active?point=${loc.lat},${loc.lon}`));
     state.alerts = data.features || [];
     renderAlerts();
   } catch {
@@ -188,7 +230,6 @@ function renderAlerts() {
     return;
   }
 
-  // Show all active alerts as clickable banners that expand inline
   const alertsHtml = state.alerts.map((f, i) => {
     const a = f.properties;
     const severity = a.severity?.toLowerCase() || "warning";
@@ -208,11 +249,9 @@ function renderAlerts() {
   banner.innerHTML = alertsHtml;
   banner.className = "alert-banner";
 
-  // Toggle detail on click
   banner.querySelectorAll(".alert-link").forEach((el) => {
     el.addEventListener("click", () => {
-      const idx = el.dataset.alertIdx;
-      const detail = document.getElementById(`alert-detail-${idx}`);
+      const detail = document.getElementById(`alert-detail-${el.dataset.alertIdx}`);
       detail.classList.toggle("hidden");
       el.classList.toggle("expanded");
     });
@@ -225,9 +264,8 @@ async function loadObservations() {
   const contentEl = document.getElementById("current-content");
 
   try {
-    // Get nearest station
     if (!state.nearestStation) {
-      const stationsData = await apiFetch(API.stations);
+      const stationsData = await apiFetch(apiUrl(`/gridpoints/${loc.office}/${loc.gridX},${loc.gridY}/stations`));
       if (stationsData.features?.length) {
         state.nearestStation = stationsData.features[0].properties.stationIdentifier;
       }
@@ -235,14 +273,11 @@ async function loadObservations() {
 
     if (!state.nearestStation) throw new Error("No station found");
 
-    const obsData = await apiFetch(
-      `https://api.weather.gov/stations/${state.nearestStation}/observations/latest`
-    );
+    const obsData = await apiFetch(apiUrl(`/stations/${state.nearestStation}/observations/latest`));
     state.observations = obsData.properties;
 
-    // Also load today's forecast for the condition text
     if (!state.forecast) {
-      const fcData = await apiFetch(API.forecast);
+      const fcData = await apiFetch(apiUrl(`/gridpoints/${loc.office}/${loc.gridX},${loc.gridY}/forecast`));
       state.forecast = fcData.properties.periods;
     }
 
@@ -277,13 +312,9 @@ function renderCurrent() {
   const condition = obs.textDescription || (state.forecast?.[0]?.shortForecast) || "N/A";
   const iconUrl = obs.icon || state.forecast?.[0]?.icon || "";
 
-  // Feels like
   let feelsLike = tempF;
-  if (windChill != null) {
-    feelsLike = Math.round(windChill * 9 / 5 + 32);
-  } else if (heatIndex != null) {
-    feelsLike = Math.round(heatIndex * 9 / 5 + 32);
-  }
+  if (windChill != null) feelsLike = Math.round(windChill * 9 / 5 + 32);
+  else if (heatIndex != null) feelsLike = Math.round(heatIndex * 9 / 5 + 32);
 
   const windDisplay = windMph === 0 ? "Calm" : `${windDir} ${windMph} mph${gustMph ? ` (gusts ${gustMph})` : ""}`;
 
@@ -330,7 +361,7 @@ async function loadForecast() {
   const contentEl = document.getElementById("forecast-content");
 
   try {
-    const data = await apiFetch(API.forecast);
+    const data = await apiFetch(apiUrl(`/gridpoints/${loc.office}/${loc.gridX},${loc.gridY}/forecast`));
     state.forecast = data.properties.periods;
     renderForecast();
     loadingEl.classList.add("hidden");
@@ -343,16 +374,13 @@ async function loadForecast() {
 function renderForecast() {
   const el = document.getElementById("forecast-content");
   const periods = state.forecast;
-
-  // Group into day pairs (daytime + nighttime)
   const days = [];
+
   for (let i = 0; i < periods.length; i++) {
     const p = periods[i];
     if (p.isDaytime) {
-      const night = periods[i + 1];
-      days.push({ day: p, night: night || null });
+      days.push({ day: p, night: periods[i + 1] || null });
     } else if (i === 0) {
-      // First period is tonight
       days.push({ day: null, night: p });
     }
   }
@@ -368,9 +396,7 @@ function renderForecast() {
         const high = dayP ? `${dayP.temperature}°` : "";
         const low = nightP ? `${nightP.temperature}°` : "";
         const detail = dayP?.detailedForecast || nightP?.detailedForecast || "";
-        const startTime = (dayP || nightP).startTime;
-        const dateStr = formatShortDate(new Date(startTime));
-
+        const dateStr = formatShortDate(new Date((dayP || nightP).startTime));
         return `
           <div class="forecast-row" onclick="this.classList.toggle('expanded')">
             <div class="forecast-day">${label}<span class="date">${dateStr}</span></div>
@@ -392,7 +418,7 @@ async function loadHourly() {
   const contentEl = document.getElementById("hourly-content");
 
   try {
-    const data = await apiFetch(API.hourly);
+    const data = await apiFetch(apiUrl(`/gridpoints/${loc.office}/${loc.gridX},${loc.gridY}/forecast/hourly`));
     state.hourly = data.properties.periods;
     renderHourly();
     loadingEl.classList.add("hidden");
@@ -404,7 +430,7 @@ async function loadHourly() {
 
 function renderHourly() {
   const el = document.getElementById("hourly-content");
-  const periods = state.hourly.slice(0, 48); // Next 48 hours
+  const periods = state.hourly.slice(0, 48);
 
   let lastDay = "";
   let html = '<div class="hourly-scroll">';
@@ -413,7 +439,6 @@ function renderHourly() {
     const dt = new Date(p.startTime);
     const dayLabel = dt.toLocaleDateString("en-US", { weekday: "short" });
 
-    // Insert day separator
     if (dayLabel !== lastDay && i > 0) {
       html += `<div class="hourly-day-label">${dayLabel}</div>`;
     }
@@ -445,16 +470,14 @@ async function loadAFD() {
   const contentEl = document.getElementById("discussion-content");
 
   try {
-    // Get the latest AFD product ID first
-    const listData = await apiFetch(`${API.afd}`);
+    const listData = await apiFetch(apiUrl(`/products/types/AFD/locations/${loc.office}`));
     const latestId = listData?.["@graph"]?.[0]?.id;
 
     let afdData;
     if (latestId) {
-      afdData = await apiFetch(`https://api.weather.gov/products/${latestId}`);
+      afdData = await apiFetch(apiUrl(`/products/${latestId}`));
     } else {
-      // Fallback: try direct latest endpoint
-      afdData = await apiFetch(`${API.afd}/latest`);
+      afdData = await apiFetch(apiUrl(`/products/types/AFD/locations/${loc.office}/latest`));
     }
 
     state.afd = afdData;
@@ -471,20 +494,14 @@ function renderAFD() {
   const afd = state.afd;
   const text = afd.productText || "";
   const issued = afd.issuanceTime ? new Date(afd.issuanceTime) : null;
-
-  // Parse into sections
   const sections = parseAFDSections(text);
 
   let html = "";
 
   if (issued) {
     html += `<div class="afd-meta">Issued: ${issued.toLocaleString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZoneName: "short",
+      weekday: "long", month: "long", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short",
     })}</div>`;
   }
 
@@ -492,7 +509,6 @@ function renderAFD() {
     const bodyHtml = state.teachingMode
       ? highlightTerms(section.body.trim())
       : escapeHtml(section.body.trim());
-
     html += `
       <div class="afd-section">
         <div class="afd-section-title">${escapeHtml(section.title)}</div>
@@ -501,7 +517,6 @@ function renderAFD() {
     `;
   });
 
-  // If no sections parsed, show the raw text
   if (!sections.length) {
     const bodyHtml = state.teachingMode ? highlightTerms(text) : escapeHtml(text);
     html += `<div class="afd-section"><div class="afd-section-body">${bodyHtml}</div></div>`;
@@ -512,53 +527,41 @@ function renderAFD() {
 
 function parseAFDSections(text) {
   const sections = [];
-  // NWS AFD sections typically start with .SECTION_NAME... or .SECTION NAME...
   const sectionRegex = /^\.([\w\s/]+?)\.{2,}/gm;
   const matches = [...text.matchAll(sectionRegex)];
-
-  if (matches.length === 0) return [];
+  if (!matches.length) return [];
 
   for (let i = 0; i < matches.length; i++) {
     const title = matches[i][1].trim();
     const startIdx = matches[i].index + matches[i][0].length;
     const endIdx = i + 1 < matches.length ? matches[i + 1].index : text.length;
     const body = text.slice(startIdx, endIdx);
-
-    // Skip the header/boilerplate sections
     const skipTitles = ["NATIONAL WEATHER SERVICE", "AREA FORECAST DISCUSSION"];
     if (skipTitles.some((s) => title.toUpperCase().includes(s))) continue;
-
     sections.push({ title, body });
   }
-
   return sections;
 }
 
 // ---- Radar ----
-const RADAR_FRAMES = 12; // 2 hours of data at 10-min intervals
-const RADAR_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-const RADAR_PLAYBACK_SPEED = 500; // ms between frames during animation
-const RADAR_BBOX_3857 = "-9974226,5373055,-9707060,5637278";
+const RADAR_FRAMES = 12;
+const RADAR_INTERVAL_MS = 10 * 60 * 1000;
+const RADAR_PLAYBACK_SPEED = 500;
 
 let radarState = {
-  frames: [],        // Array of { time: Date, img: HTMLImageElement }
+  frames: [],
   currentFrame: 0,
   playing: false,
   playTimer: null,
 };
 
 function initRadar() {
-  const playBtn = document.getElementById("radar-play");
-  const scrubber = document.getElementById("radar-scrubber");
-
-  playBtn.addEventListener("click", toggleRadarPlay);
-
-  scrubber.addEventListener("input", () => {
+  document.getElementById("radar-play").addEventListener("click", toggleRadarPlay);
+  document.getElementById("radar-scrubber").addEventListener("input", (e) => {
     stopRadarPlay();
-    radarState.currentFrame = parseInt(scrubber.value);
+    radarState.currentFrame = parseInt(e.target.value);
     showRadarFrame(radarState.currentFrame);
   });
-
   document.getElementById("radar-refresh").addEventListener("click", () => {
     stopRadarPlay();
     loadRadar();
@@ -566,29 +569,19 @@ function initRadar() {
 }
 
 function toggleRadarPlay() {
-  if (radarState.playing) {
-    stopRadarPlay();
-  } else {
-    startRadarPlay();
-  }
+  radarState.playing ? stopRadarPlay() : startRadarPlay();
 }
 
 function startRadarPlay() {
   radarState.playing = true;
   document.getElementById("radar-play-icon").classList.add("hidden");
   document.getElementById("radar-pause-icon").classList.remove("hidden");
-
-  // If at the end, restart from beginning
   if (radarState.currentFrame >= RADAR_FRAMES - 1) {
     radarState.currentFrame = 0;
     showRadarFrame(0);
   }
-
   radarState.playTimer = setInterval(() => {
-    radarState.currentFrame++;
-    if (radarState.currentFrame >= RADAR_FRAMES) {
-      radarState.currentFrame = 0; // loop
-    }
+    radarState.currentFrame = (radarState.currentFrame + 1) % RADAR_FRAMES;
     showRadarFrame(radarState.currentFrame);
   }, RADAR_PLAYBACK_SPEED);
 }
@@ -597,27 +590,39 @@ function stopRadarPlay() {
   radarState.playing = false;
   document.getElementById("radar-play-icon").classList.remove("hidden");
   document.getElementById("radar-pause-icon").classList.add("hidden");
-  if (radarState.playTimer) {
-    clearInterval(radarState.playTimer);
-    radarState.playTimer = null;
-  }
+  clearInterval(radarState.playTimer);
+  radarState.playTimer = null;
 }
 
 function showRadarFrame(idx) {
-  const container = document.getElementById("radar-frames-container");
-  const imgs = container.querySelectorAll("img");
-  imgs.forEach((img, i) => {
+  document.querySelectorAll("#radar-frames-container img").forEach((img, i) => {
     img.classList.toggle("active-frame", i === idx);
   });
-
   document.getElementById("radar-scrubber").value = idx;
-
-  // Update time label
   const frame = radarState.frames[idx];
   if (frame) {
     document.getElementById("radar-time-current").textContent =
       frame.time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
+}
+
+function getRadarBbox3857() {
+  // ~150km box around current location in Web Mercator
+  const degSpread = 1.2; // ~1.2 degrees in each direction
+  const latMin = loc.lat - degSpread * 0.65;
+  const latMax = loc.lat + degSpread * 0.65;
+  const lonMin = loc.lon - degSpread;
+  const lonMax = loc.lon + degSpread;
+
+  const sw = toMercator(latMin, lonMin);
+  const ne = toMercator(latMax, lonMax);
+  return `${sw[0].toFixed(0)},${sw[1].toFixed(0)},${ne[0].toFixed(0)},${ne[1].toFixed(0)}`;
+}
+
+function toMercator(lat, lon) {
+  const x = lon * 20037508.34 / 180;
+  const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 20037508.34 / Math.PI;
+  return [x, y];
 }
 
 async function loadRadar() {
@@ -629,30 +634,29 @@ async function loadRadar() {
   mapEl.classList.add("hidden");
 
   try {
-    // Load dark base map
+    const bbox3857 = getRadarBbox3857();
+
+    // Dark base map
     const basemap = document.getElementById("radar-basemap");
-    const baseUrl = buildStaticBaseMap();
+    const baseUrl = `https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/export?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image`;
     const basePromise = new Promise((resolve) => {
       basemap.onload = resolve;
       basemap.onerror = resolve;
       basemap.src = baseUrl;
     });
 
-    // Build timestamps: last 2 hours in 10-min steps
+    // Timestamps: last 2 hours
     const now = Date.now();
     const times = [];
     for (let i = 0; i < RADAR_FRAMES; i++) {
-      const t = now - (RADAR_FRAMES - 1 - i) * RADAR_INTERVAL_MS;
-      times.push(t);
+      times.push(now - (RADAR_FRAMES - 1 - i) * RADAR_INTERVAL_MS);
     }
 
-    // Update time range labels
-    const startDate = new Date(times[0]);
     document.getElementById("radar-time-start").textContent =
-      startDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      new Date(times[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     document.getElementById("radar-time-end").textContent = "Now";
 
-    // Create and preload all radar frames
+    // Preload frames
     const container = document.getElementById("radar-frames-container");
     container.innerHTML = "";
     radarState.frames = [];
@@ -664,10 +668,9 @@ async function loadRadar() {
         const img = document.createElement("img");
         img.className = i === RADAR_FRAMES - 1 ? "active-frame" : "";
         img.alt = `Radar frame ${i + 1}`;
-        const url = `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${RADAR_BBOX_3857}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image&time=${t}`;
+        img.src = `https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer/exportImage?bbox=${bbox3857}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image&time=${t}`;
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
-        img.src = url;
         container.appendChild(img);
         radarState.frames.push({ time: new Date(t), img });
       });
@@ -675,7 +678,6 @@ async function loadRadar() {
 
     await Promise.all([basePromise, ...framePromises]);
 
-    // Set scrubber
     const scrubber = document.getElementById("radar-scrubber");
     scrubber.max = RADAR_FRAMES - 1;
     radarState.currentFrame = RADAR_FRAMES - 1;
@@ -684,24 +686,9 @@ async function loadRadar() {
     loadingEl.classList.add("hidden");
     mapEl.classList.remove("hidden");
   } catch (err) {
-    console.error("[FVW] Radar error:", err);
+    console.error("[NWS] Radar error:", err);
     loadingEl.innerHTML = `<span class="error-msg">Could not load radar. ${err.message}</span>`;
   }
-}
-
-function buildStaticBaseMap() {
-  const bbox = "-89.6,43.4,-87.2,45.1";
-  const [xmin, ymin, xmax, ymax] = bbox.split(",").map(Number);
-
-  function toMercator(lat, lon) {
-    const x = lon * 20037508.34 / 180;
-    const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 20037508.34 / Math.PI;
-    return [x, y];
-  }
-  const sw = toMercator(ymin, xmin);
-  const ne = toMercator(ymax, xmax);
-
-  return `https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/export?bbox=${sw[0]},${sw[1]},${ne[0]},${ne[1]}&bboxSR=3857&imageSR=3857&size=600,500&format=png32&f=image`;
 }
 
 // ---- Utilities ----

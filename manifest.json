@@ -1,7 +1,7 @@
 {
-  "name": "Fox Valley Weather",
-  "short_name": "FVW",
-  "description": "Weather for Appleton, WI 54911 with forecast discussion teaching mode",
+  "name": "NWS Weather",
+  "short_name": "NWS Wx",
+  "description": "Weather.gov as an app. Forecast, radar, and scientific discussion with teaching mode.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#0b1929",
